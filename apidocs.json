@@ -1,0 +1,438 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Text-to-Speech API",
+    "description": "API para convertir texto largo a voz con soporte para varios motores TTS. Incluye procesamiento de números, etiquetas especiales, troceado automático y opciones de streaming.\n\n## Motores disponibles\n\n- **coqui**: usa un servidor XTTS con los endpoints `/tts` y `/tts_stream`.\n- **chatterbox**: usa la API REST de Chatterbox (`/tts` y `/voices`).\n\nEl motor por defecto se selecciona con la variable de entorno `TTS_ENGINE` (`coqui` por defecto) y se puede forzar por petición con el campo `engine`.\n\n## Requisitos de Funcionamiento\n\n- **Coqui**: servicio `xtts_coqui` accesible en `SERVER_URL_COQUI_XTTS` (por defecto http://192.168.1.69:8820). Se mantiene `SERVER_URL_VOICE_XTTS` por compatibilidad.\n- **Chatterbox**: servidor REST accesible en `SERVER_URL_CHATTERBOX` (por defecto http://192.168.1.69:8020).\n\nSi el motor seleccionado no está disponible, los endpoints `/text-to-speech` y `/tts_stream` retornarán errores de conexión.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Support"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://192.168.1.69:8000",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Root endpoint",
+        "description": "Redirige a la documentación interactiva de la API",
+        "operationId": "read_root",
+        "responses": {
+          "302": {
+            "description": "Redirección a /docs"
+          }
+        },
+        "tags": ["Health"]
+      }
+    },
+    "/text-to-speech": {
+      "post": {
+        "summary": "Generar audio de forma asincrónica",
+        "description": "Crea una tarea para convertir texto a voz de manera asincrónica. El audio se procesa en segundo plano y se puede consultar usando el job_id retornado.",
+        "operationId": "text_to_speech",
+        "tags": ["Text-to-Speech"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextToSpeechRequest"
+              },
+              "example": {
+                "text": "Hola, este es un ejemplo de conversión de texto a voz.",
+                "voice": "Xavier Hayasaka",
+                "lang": "es",
+                "engine": "coqui"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tarea creada exitosamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextToSpeechResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error en la solicitud"
+          },
+          "500": {
+            "description": "Error interno del servidor"
+          }
+        }
+      }
+    },
+    "/status/{job_id}": {
+      "get": {
+        "summary": "Obtener estado de una tarea",
+        "description": "Consulta el estado actual de una tarea de conversión de texto a voz identificada por su job_id.",
+        "operationId": "get_job_status",
+        "tags": ["Status"],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "ID único de la tarea",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de la tarea",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tarea no encontrada"
+          }
+        }
+      }
+    },
+    "/audio/{job_id}": {
+      "get": {
+        "summary": "Descargar audio generado",
+        "description": "Descarga el archivo de audio MP3 generado por la tarea especificada. El status de la tarea debe ser 'completed'.",
+        "operationId": "get_audio",
+        "tags": ["Audio"],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "description": "ID único de la tarea",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo de audio MP3",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Audio aún no listo o error en procesamiento"
+          },
+          "404": {
+            "description": "Tarea o archivo no encontrado"
+          }
+        }
+      }
+    },
+    "/tts_stream": {
+      "post": {
+        "summary": "Streaming directo de texto a voz",
+        "description": "Convierte texto a voz y retorna un stream de audio en tiempo real. No requiere esperar a que finalice el procesamiento.",
+        "operationId": "tts_stream",
+        "tags": ["Text-to-Speech"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TTSStreamRequest"
+              },
+              "example": {
+                "text": "Este es un streaming de audio en tiempo real.",
+                "voice": "Xavier Hayasaka",
+                "language": "es",
+                "add_wav_header": true,
+                "stream_chunk_size": "20",
+                "engine": "coqui"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stream de audio en formato MP3",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error en la solicitud (motor o voz no encontrados, texto vacío, etc.)"
+          },
+          "502": {
+            "description": "Error devuelto por el motor TTS seleccionado"
+          },
+          "500": {
+            "description": "Error interno del servidor"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "TextToSpeechRequest": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Texto a convertir a voz. Soporta números que serán convertidos a palabras, acentos y caracteres especiales del español.",
+            "example": "Los números como 123 y 45,67 se convierten automáticamente a palabras."
+          },
+          "voice": {
+            "type": "string",
+            "nullable": true,
+            "description": "Voz a utilizar. En Coqui debe existir en studio_speakers.json y por defecto se usa Xavier Hayasaka. En Chatterbox es un ID de GET /voices y por defecto se usa CHATTERBOX_DEFAULT_VOICE (default).",
+            "example": "default"
+          },
+          "lang": {
+            "type": "string",
+            "default": "es",
+            "description": "Código de idioma (ISO 639-1). Ejemplo: es para español, en para inglés.",
+            "example": "es"
+          },
+          "engine": {
+            "type": "string",
+            "enum": ["coqui", "chatterbox"],
+            "nullable": true,
+            "description": "Fuerza el motor TTS para esta petición. Si se omite, se usa la variable TTS_ENGINE.",
+            "example": "chatterbox"
+          },
+          "reference_audio": {
+            "nullable": true,
+            "description": "Ruta local accesible desde el contenedor, URL o data URI con el audio de referencia de Chatterbox. Se envía como archivo multipart a /tts y sustituye a la voz configurada.",
+            "oneOf": [
+              { "type": "string" },
+              { "type": "object", "additionalProperties": true }
+            ],
+            "example": "/ruta/local/referencia.wav"
+          },
+          "exaggeration": {
+            "type": "number",
+            "nullable": true,
+            "description": "Parámetro exaggeration de Chatterbox. Por defecto CHATTERBOX_EXAGGERATION.",
+            "example": 0.5
+          },
+          "temperature": {
+            "type": "number",
+            "nullable": true,
+            "description": "Parámetro temperature de Chatterbox. Por defecto CHATTERBOX_TEMPERATURE.",
+            "example": 0.8
+          },
+          "seed": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Semilla de Chatterbox. 0 usa una semilla aleatoria. Por defecto CHATTERBOX_SEED.",
+            "example": 0
+          },
+          "cfg_weight": {
+            "type": "number",
+            "nullable": true,
+            "description": "Parámetro cfg_weight de Chatterbox. Por defecto CHATTERBOX_CFG_WEIGHT.",
+            "example": 0.5
+          }
+        }
+      },
+      "TTSStreamRequest": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Texto a convertir a voz de forma inmediata.",
+            "example": "Stream de audio en tiempo real"
+          },
+          "voice": {
+            "type": "string",
+            "nullable": true,
+            "description": "Voz a utilizar. En Coqui es una clave de studio_speakers.json y por defecto se usa Xavier Hayasaka. En Chatterbox es un ID de GET /voices y por defecto se usa CHATTERBOX_DEFAULT_VOICE (default).",
+            "example": "default"
+          },
+          "language": {
+            "type": "string",
+            "default": "es",
+            "description": "Código de idioma.",
+            "example": "es"
+          },
+          "add_wav_header": {
+            "type": "boolean",
+            "default": true,
+            "description": "Agregar encabezado WAV al audio (solo Coqui)."
+          },
+          "stream_chunk_size": {
+            "type": "string",
+            "default": "20",
+            "description": "Tamaño de los chunks para el streaming en KB (solo Coqui).",
+            "example": "20"
+          },
+          "engine": {
+            "type": "string",
+            "enum": ["coqui", "chatterbox"],
+            "nullable": true,
+            "description": "Fuerza el motor TTS para esta petición. Si se omite, se usa la variable TTS_ENGINE.",
+            "example": "coqui"
+          },
+          "reference_audio": {
+            "nullable": true,
+            "description": "Ruta local accesible desde el contenedor, URL o data URI con el audio de referencia de Chatterbox. Se envía como archivo multipart a /tts.",
+            "oneOf": [
+              { "type": "string" },
+              { "type": "object", "additionalProperties": true }
+            ],
+            "example": "/ruta/local/referencia.wav"
+          },
+          "exaggeration": {
+            "type": "number",
+            "nullable": true,
+            "description": "Parámetro exaggeration de Chatterbox.",
+            "example": 0.5
+          },
+          "temperature": {
+            "type": "number",
+            "nullable": true,
+            "description": "Parámetro temperature de Chatterbox.",
+            "example": 0.8
+          },
+          "seed": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Semilla de Chatterbox. 0 usa una semilla aleatoria.",
+            "example": 0
+          },
+          "cfg_weight": {
+            "type": "number",
+            "nullable": true,
+            "description": "Parámetro cfg_weight de Chatterbox.",
+            "example": 0.5
+          }
+        }
+      },
+      "TextToSpeechResponse": {
+        "type": "object",
+        "properties": {
+          "audio_url": {
+            "type": "string",
+            "description": "URL para consultar el estado o descargar el audio. Corresponde a /status/{job_id}.",
+            "example": "/status/550e8400-e29b-41d4-a716-446655440000"
+          },
+          "job_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID único de la tarea de procesamiento.",
+            "example": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "processing", "completed", "failed"],
+            "description": "Estado actual de la tarea.",
+            "example": "queued"
+          }
+        }
+      },
+      "JobStatus": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["queued", "processing", "completed", "failed"],
+            "description": "Estado actual de la tarea.",
+            "example": "processing"
+          },
+          "engine": {
+            "type": "string",
+            "enum": ["coqui", "chatterbox"],
+            "description": "Motor TTS utilizado para procesar la tarea.",
+            "example": "chatterbox"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lista de errores ocurridos durante el procesamiento.",
+            "example": []
+          },
+          "output_file": {
+            "type": "string",
+            "nullable": true,
+            "description": "Ruta del archivo de salida generado.",
+            "example": "audio_files/audio_550e8400.mp3"
+          },
+          "audio_url": {
+            "type": "string",
+            "nullable": true,
+            "description": "URL para descargar el audio una vez completado.",
+            "example": "/audio/550e8400-e29b-41d4-a716-446655440000"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Endpoints de salud y utilidad"
+    },
+    {
+      "name": "Text-to-Speech",
+      "description": "Endpoints para conversión de texto a voz"
+    },
+    {
+      "name": "Status",
+      "description": "Endpoints para consultar estado de tareas"
+    },
+    {
+      "name": "Audio",
+      "description": "Endpoints para descargar audio"
+    }
+  ],
+  "x-dependencies": {
+    "external-services": [
+      {
+        "name": "xtts_coqui",
+        "description": "Servicio de Text-to-Speech Engine basado en Coqui XTTS",
+        "required": true,
+        "default-url": "http://192.168.1.69:8820",
+        "environment-variable": "SERVER_URL_VOICE_XTTS",
+        "endpoints-required": [
+          "/tts_stream"
+        ],
+        "note": "Este servicio es CRÍTICO. Sin él, los endpoints de conversión de texto a voz no funcionarán."
+      }
+    ],
+    "configuration-files": [
+      {
+        "name": "studio_speakers.json",
+        "description": "Archivo JSON con configuración de voces y embeddings de altavoces",
+        "required": true,
+        "path": "app/studio_speakers.json",
+        "note": "Contiene los embeddings de las voces disponibles para la síntesis de voz"
+      }
+    ]
+  }
+}
