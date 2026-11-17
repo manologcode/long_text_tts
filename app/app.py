@@ -354,6 +354,57 @@ def extract_tags_and_clean_text(text: str):
     
     return elements
 
+def extract_tags(text: str):
+    """Extrae las etiquetas conservando el texto original sin modificarlo."""
+    tag_pattern = r'<([^>]+)>'
+    elements = []
+    last_end = 0
+
+    for match in re.finditer(tag_pattern, text):
+        if match.start() > last_end:
+            content = text[last_end:match.start()]
+            if content:
+                elements.append({'type': 'text', 'content': content})
+        elements.append({'type': 'tag', 'content': match.group(1)})
+        last_end = match.end()
+
+    if last_end < len(text):
+        content = text[last_end:]
+        if content:
+            elements.append({'type': 'text', 'content': content})
+
+    return elements
+
+def split_raw_text(text: str, max_length: int):
+    """Divide el texto sin modificar su contenido original."""
+    if max_length <= 0 or len(text) <= max_length:
+        return [text]
+
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(start + max_length, len(text))
+        if end < len(text):
+            window = text[start:end]
+            split_at = max(
+                window.rfind(". "),
+                window.rfind("! "),
+                window.rfind("? "),
+                window.rfind("; "),
+                window.rfind(": "),
+                window.rfind(", "),
+                window.rfind("\n"),
+                window.rfind(" "),
+            )
+            if split_at > 0:
+                end = start + split_at + 1
+        chunk = text[start:end]
+        if chunk:
+            chunks.append(chunk)
+        start = end
+
+    return chunks
+
 def split_text_by_punctuation(text: str, max_length: int):
     """Divide el texto por puntuación manteniendo el tamaño máximo."""
     signos_puntuacion = re.compile(r'([.,;:!?])')
@@ -437,7 +488,10 @@ def build_audio_files(
     options: TTSOptions,
 ) -> list:
     """Genera los fragmentos de audio de un texto, incluyendo sus etiquetas."""
-    elements = extract_tags_and_clean_text(text)
+    if engine.name == "chatterbox":
+        elements = extract_tags(text)
+    else:
+        elements = extract_tags_and_clean_text(text)
 
     if not elements:
         raise Exception("No hay contenido para procesar")
@@ -450,7 +504,26 @@ def build_audio_files(
             # Procesar texto
             text_content = element['content']
 
-            if len(text_content) > engine.max_chunk_size:
+            if engine.name == "chatterbox":
+                # Enviar el texto tal cual, sin limpiar, convertir ni eliminar nada
+                chunks = split_raw_text(
+                    text_content, max_length=engine.max_chunk_size
+                )
+                for chunk in chunks:
+                    if chunk:
+                        audio_file = process_text_chunk(
+                            chunk,
+                            voice,
+                            lang,
+                            text_chunk_counter,
+                            job_id,
+                            engine,
+                            options,
+                        )
+                        if audio_file:
+                            audio_files.append(audio_file)
+                        text_chunk_counter += 1
+            elif len(text_content) > engine.max_chunk_size:
                 # Dividir texto largo en chunks
                 chunks = split_text_by_punctuation(
                     text_content, max_length=engine.max_chunk_size
