@@ -574,7 +574,7 @@ def build_audio_files(
     return audio_files
 
 
-async def process_text_to_speech(
+def process_text_to_speech(
     text: str,
     voice: str,
     lang: str,
@@ -706,7 +706,7 @@ def synthesize_full_stream(
         tasks_status.pop(temp_job, None)
 
 @app.post("/tts_stream")
-async def tts_stream(request: TTSStreamRequest):
+def tts_stream(request: TTSStreamRequest):
     """
     Endpoint de streaming directo para Text-to-Speech.
     

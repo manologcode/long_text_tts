@@ -183,8 +183,8 @@ docker run -d \
   -p 5008:5008 \
   -e TTS_ENGINE=chatterbox \
   -e SERVER_URL_CHATTERBOX=http://192.168.1.69:8020 \
-  --tmpfs /app/audio_files \
-  --tmpfs /app/temp_audio \
+  --tmpfs /app/audio_files:mode=1777 \
+  --tmpfs /app/temp_audio:mode=1777 \
   manologcode/long_text_tts:latest
 ```
 
@@ -204,8 +204,8 @@ services:
     ports:
       - "5008:5008"
     tmpfs:
-      - /app/audio_files
-      - /app/temp_audio
+      - /app/audio_files:mode=1777
+      - /app/temp_audio:mode=1777
     environment:
       - TTS_ENGINE=chatterbox
       - SERVER_URL_CHATTERBOX=http://192.168.1.69:8020

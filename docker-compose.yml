@@ -9,9 +9,11 @@ services:
     # Sin volumenes persistentes: los audios generados viven solo en el
     # contenedor y se borran al reiniciarlo. Los efectos (app/effects) y la
     # configuracion van dentro de la imagen y permanecen constantes.
+    # mode=1777 para que el usuario sin privilegios de la imagen (myuser)
+    # pueda escribir; sin esto el tmpfs queda root:root y da Permission denied.
     tmpfs:
-      - /app/audio_files
-      - /app/temp_audio
+      - /app/audio_files:mode=1777
+      - /app/temp_audio:mode=1777
     environment:
       - TTS_ENGINE=${TTS_ENGINE:-chatterbox}
       - SERVER_URL_COQUI_XTTS=${SERVER_URL_COQUI_XTTS:-http://192.168.1.69:8820}
