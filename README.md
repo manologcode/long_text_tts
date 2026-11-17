@@ -183,8 +183,8 @@ docker run -d \
   -p 5008:5008 \
   -e TTS_ENGINE=chatterbox \
   -e SERVER_URL_CHATTERBOX=http://192.168.1.69:8020 \
-  -v long_text_tts_audio:/app/audio_files \
-  -v long_text_tts_temp:/app/temp_audio \
+  --tmpfs /app/audio_files \
+  --tmpfs /app/temp_audio \
   manologcode/long_text_tts:latest
 ```
 
@@ -203,23 +203,19 @@ services:
     container_name: long_text_tts
     ports:
       - "5008:5008"
-    volumes:
-      - audio_files:/app/audio_files
-      - temp_audio:/app/temp_audio
+    tmpfs:
+      - /app/audio_files
+      - /app/temp_audio
     environment:
       - TTS_ENGINE=chatterbox
       - SERVER_URL_CHATTERBOX=http://192.168.1.69:8020
-
-volumes:
-  audio_files:
-  temp_audio:
 ```
 
 ```bash
 docker compose up -d
 ```
 
-Los volúmenes `audio_files` y `temp_audio` conservan los MP3 generados entre reinicios y actualizaciones de la imagen. Para actualizar:
+En producción no se usan volúmenes: los MP3 generados y los temporales se guardan en `tmpfs` dentro del contenedor y se eliminan al reiniciarlo. Los efectos (`app/effects`) y la configuración forman parte de la imagen y permanecen constantes. Para actualizar:
 
 ```bash
 docker compose pull
@@ -228,15 +224,13 @@ docker compose up -d
 
 ### Configuración y audios de referencia
 
-Para usar tus propios ficheros sin reconstruir la imagen, móntalos como volúmenes de solo lectura:
+La configuración y los audios de referencia deben ir dentro de la imagen (por ejemplo, copiándolos en `app/` antes de `docker build`), ya que el despliegue de producción no monta volúmenes del host.
+
+En desarrollo sí se puede montar el repositorio completo:
 
 ```yaml
     volumes:
-      - audio_files:/app/audio_files
-      - temp_audio:/app/temp_audio
-      - ./chatterbox_voices.json:/app/chatterbox_voices.json:ro
-      - ./studio_speakers.json:/app/studio_speakers.json:ro
-      - ./referencias:/app/referencias:ro
+      - ./app:/app
 ```
 
 Las rutas de `chatterbox_voices.json` deben ser accesibles dentro del contenedor, por ejemplo `/app/referencias/mi_voz.wav`.
