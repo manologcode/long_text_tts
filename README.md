@@ -172,32 +172,100 @@ Si se omiten, se usan los valores de las variables de entorno.
 
 ## Ejecutar con Docker
 
+La imagen publicada está en Docker Hub como `manologcode/long_text_tts:latest`.
+
+### Solo con la imagen (sin clonar el repositorio)
+
+```bash
+docker run -d \
+  --name long_text_tts \
+  --restart unless-stopped \
+  -p 5008:5008 \
+  -e TTS_ENGINE=chatterbox \
+  -e SERVER_URL_CHATTERBOX=http://192.168.1.69:8020 \
+  -v long_text_tts_audio:/app/audio_files \
+  -v long_text_tts_temp:/app/temp_audio \
+  manologcode/long_text_tts:latest
+```
+
+La API queda disponible en `http://localhost:5008/docs`.
+
+### Con Docker Compose (recomendado)
+
+Guarda este `docker-compose.yml` en cualquier carpeta; no hace falta el código:
+
+```yaml
+services:
+  app:
+    image: manologcode/long_text_tts:latest
+    pull_policy: always
+    restart: always
+    container_name: long_text_tts
+    ports:
+      - "5008:5008"
+    volumes:
+      - audio_files:/app/audio_files
+      - temp_audio:/app/temp_audio
+    environment:
+      - TTS_ENGINE=chatterbox
+      - SERVER_URL_CHATTERBOX=http://192.168.1.69:8020
+
+volumes:
+  audio_files:
+  temp_audio:
+```
+
 ```bash
 docker compose up -d
 ```
 
-Para forzar Chatterbox:
+Los volúmenes `audio_files` y `temp_audio` conservan los MP3 generados entre reinicios y actualizaciones de la imagen. Para actualizar:
 
 ```bash
-TTS_ENGINE=chatterbox docker compose up -d
+docker compose pull
+docker compose up -d
 ```
 
-También se puede ejecutar sin Compose:
+### Configuración y audios de referencia
+
+Para usar tus propios ficheros sin reconstruir la imagen, móntalos como volúmenes de solo lectura:
+
+```yaml
+    volumes:
+      - audio_files:/app/audio_files
+      - temp_audio:/app/temp_audio
+      - ./chatterbox_voices.json:/app/chatterbox_voices.json:ro
+      - ./studio_speakers.json:/app/studio_speakers.json:ro
+      - ./referencias:/app/referencias:ro
+```
+
+Las rutas de `chatterbox_voices.json` deben ser accesibles dentro del contenedor, por ejemplo `/app/referencias/mi_voz.wav`.
+
+### Desarrollo (con el repositorio clonado)
 
 ```bash
-docker run -d \
-  --name long_text_coqui \
-  -v ./app:/app \
-  -p 5008:5008 \
-  -e TTS_ENGINE=chatterbox \
-  -e SERVER_URL_CHATTERBOX=http://192.168.1.69:8020 \
-  manologcode/long_text_coqui
+docker compose -f docker-compose.dev.yml up -d --build
 ```
+
+También se puede forzar el motor:
+
+```bash
+TTS_ENGINE=coqui docker compose -f docker-compose.dev.yml up -d --build
+```
+
+### Publicar una nueva imagen
+
+```bash
+docker build -t manologcode/long_text_tts:latest .
+docker push manologcode/long_text_tts:latest
+```
+
+El workflow de GitHub Actions (`.github/workflows/image.yml`) también publica la imagen al hacer push a `main`.
 
 ## Probar la conversión
 
 ```bash
-docker exec long_text_coqui python test.py "esto es un texto de prueba para que lo leas"
+docker exec long_text_tts python test.py "esto es un texto de prueba para que lo leas"
 ```
 
 También se puede indicar el motor y la voz:
@@ -206,7 +274,7 @@ También se puede indicar el motor y la voz:
 docker exec \
   -e TTS_ENGINE=chatterbox \
   -e TTS_VOICE=Narrador \
-  long_text_coqui python test.py "texto de prueba"
+  long_text_tts python test.py "texto de prueba"
 ```
 
 ## Etiquetas de efectos

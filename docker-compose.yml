@@ -1,14 +1,19 @@
 services:
   app:
-    image: manologcode/long_text_tts
-    build: .
+    image: manologcode/long_text_tts:latest
+    pull_policy: always
     restart: always
     container_name: long_text_tts
     command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5008"]
     ports:
       - "5008:5008"
     volumes:
-      - ./app:/app
+      - audio_files:/app/audio_files
+      - temp_audio:/app/temp_audio
+      # Configuracion y audios de referencia personalizados (opcional):
+      # - ./chatterbox_voices.json:/app/chatterbox_voices.json:ro
+      # - ./studio_speakers.json:/app/studio_speakers.json:ro
+      # - ./referencias:/app/referencias:ro
     environment:
       - TTS_ENGINE=${TTS_ENGINE:-chatterbox}
       - SERVER_URL_COQUI_XTTS=${SERVER_URL_COQUI_XTTS:-http://192.168.1.69:8820}
@@ -22,3 +27,7 @@ services:
       - CHATTERBOX_CFG_WEIGHT=${CHATTERBOX_CFG_WEIGHT:-0.5}
       - TTS_MAX_CHUNK_SIZE=${TTS_MAX_CHUNK_SIZE:-}
       - TTS_HTTP_TIMEOUT=${TTS_HTTP_TIMEOUT:-120}
+
+volumes:
+  audio_files:
+  temp_audio:

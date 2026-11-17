@@ -1,0 +1,14 @@
+.git
+.gitignore
+.github
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+app/audio_files
+app/temp_audio
+README.md
+apidocs.json
+docker-compose*.yml
+Dockerfile
+.dockerignore
