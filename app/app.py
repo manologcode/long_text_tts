@@ -7,6 +7,7 @@ import json
 import uuid
 import re
 from pydub import AudioSegment
+from pydub.silence import detect_leading_silence
 import logging
 from num2words import num2words
 
@@ -457,8 +458,50 @@ def get_tag_audio_file(tag_name: str):
         logger.warning(f"Archivo de etiqueta no encontrado: {tag_file}")
         return None
 
-def merge_audio_elements(audio_files: list, output_filename: str):
-    """Une múltiples archivos de audio en uno solo."""
+def trim_audio_silence(
+    audio: AudioSegment,
+    trim_leading: bool = True,
+    trim_trailing: bool = True,
+    silence_threshold: float = -45.0,
+    chunk_size: int = 10,
+) -> AudioSegment:
+    """Recorta el silencio inicial y/o final de un fragmento de audio."""
+    leading = (
+        detect_leading_silence(audio, silence_threshold, chunk_size)
+        if trim_leading
+        else 0
+    )
+    trailing = (
+        detect_leading_silence(audio.reverse(), silence_threshold, chunk_size)
+        if trim_trailing
+        else 0
+    )
+
+    end = len(audio) - trailing
+    if leading >= end:
+        return audio
+    if leading or trailing:
+        return audio[leading:end]
+    return audio
+
+
+def is_effect_file(path: str) -> bool:
+    """Indica si la ruta pertenece a los efectos/silencios intencionados."""
+    tags_dir = os.path.abspath(Config.AUDIO_TAGS_DIR) + os.sep
+    return os.path.abspath(path).startswith(tags_dir)
+
+
+def merge_audio_elements(
+    audio_files: list,
+    output_filename: str,
+    trim_silence: bool = False,
+):
+    """Une múltiples archivos de audio en uno solo.
+
+    Con ``trim_silence`` recorta el silencio de cada fragmento sintetizado
+    antes de concatenarlo, de modo que las uniones no acumulen pausas. Los
+    archivos de efectos (silencios/click intencionados) se dejan intactos.
+    """
     try:
         if not audio_files:
             raise Exception("No hay archivos de audio para unir")
@@ -469,10 +512,22 @@ def merge_audio_elements(audio_files: list, output_filename: str):
         if not existing_files:
             raise Exception("No se encontraron archivos de audio válidos")
         
-        combined = AudioSegment.from_file(existing_files[0])
-        for archivo in existing_files[1:]:
+        combined = None
+        last_index = len(existing_files) - 1
+        for index, archivo in enumerate(existing_files):
             sound = AudioSegment.from_file(archivo)
-            combined += sound
+            if trim_silence and not is_effect_file(archivo):
+                # Solo se recortan los bordes internos: el inicio del primer
+                # fragmento y el final del último se mantienen intactos.
+                sound = trim_audio_silence(
+                    sound,
+                    trim_leading=index > 0,
+                    trim_trailing=index < last_index,
+                )
+            combined = sound if combined is None else combined + sound
+
+        if combined is None:
+            raise Exception("No se generaron archivos de audio válidos")
         
         combined.export(output_filename, format="mp3", bitrate="256k")
         return output_filename
@@ -589,7 +644,11 @@ def process_text_to_speech(
         audio_files = build_audio_files(text, voice, lang, job_id, engine, options)
 
         output_filename = f"{Config.AUDIO_FILES_DIR}/{job_id}_complete.mp3"
-        merge_audio_elements(audio_files, output_filename)
+        merge_audio_elements(
+            audio_files,
+            output_filename,
+            trim_silence=engine.name == "chatterbox",
+        )
         
         tasks_status[job_id].update({
             "status": "completed",
@@ -694,7 +753,11 @@ def synthesize_full_stream(
             options,
         )
         output_filename = f"{Config.TEMP_DIR}/{temp_job}_complete.mp3"
-        merge_audio_elements(audio_files, output_filename)
+        merge_audio_elements(
+            audio_files,
+            output_filename,
+            trim_silence=engine.name == "chatterbox",
+        )
         with open(output_filename, "rb") as f:
             return f.read()
     finally:

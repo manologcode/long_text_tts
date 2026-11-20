@@ -13,10 +13,11 @@ El motor se selecciona con la variable de entorno `TTS_ENGINE` y también se pue
 
 - Convierte textos largos a voz.
 - Trocea automáticamente textos que superan el límite del motor.
-- Limpia emojis, iconos y caracteres especiales.
-- Convierte números a palabras en español.
+- Limpia emojis, iconos y caracteres especiales (solo con Coqui).
+- Con Coqui convierte números a palabras en español.
+- Con Chatterbox conserva el texto original, incluidos acentos y signos.
 - Permite insertar silencios y efectos con etiquetas como `<silence1>`, `<click1>` o `<click2>`.
-- Une todos los fragmentos en un solo MP3.
+- Une todos los fragmentos en un solo MP3, sin acumular silencios en las uniones con Chatterbox.
 - Selección de motor mediante Docker Compose o por petición.
 
 ## Servicios externos de dependencia
@@ -46,6 +47,11 @@ Variables relacionadas:
 ```bash
 TTS_ENGINE=chatterbox docker compose up -d
 ```
+
+Con este motor el texto se envía tal cual al servidor: no se limpian emojis, no
+se convierten números ni se eliminan acentos. Al unir los fragmentos de audio se
+recorta el silencio inicial y final de cada uno para que las uniones no acumulen
+pausas. Los efectos `<silence1>`, `<click1>` y `<click2>` no se recortan.
 
 Variables relacionadas:
 
